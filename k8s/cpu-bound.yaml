@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cpu-bound-config
+  labels:
+    app.kubernetes.io/name: cpu-bound
+# Mesmos valores de apps/cpu-bound/config/app.env
+data:
+  SERVER_PORT: "8080"
+  PRIMES_MIN_LIMIT: "2"
+  PRIMES_MAX_LIMIT: "10000000"
+  TOMCAT_MAX_THREADS: "200"
+  JAVA_OPTS: ""
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cpu-bound
+  labels:
+    app.kubernetes.io/name: cpu-bound
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cpu-bound
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cpu-bound
+    spec:
+      containers:
+        - name: cpu-bound
+          image: beatrizsm3/cpu-bound:1.0.0
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: cpu-bound-config
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 24
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 20
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cpu-bound
+  labels:
+    app.kubernetes.io/name: cpu-bound
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: cpu-bound
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      # Publicada na VM pelo `minikube start --ports`; o Load Balancer aponta para ela
+      nodePort: 30081
